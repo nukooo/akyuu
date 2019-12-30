@@ -3,19 +3,17 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
-
-	"github.com/nukooo/icy"
 )
 
-type status struct{ dj string }
+type status struct{ dj, song string }
 
 func getStatus() (status, error) {
 	r, err := http.Get("https://r-a-d.io/api")
@@ -24,31 +22,24 @@ func getStatus() (status, error) {
 	}
 	defer r.Body.Close()
 	var v struct {
-		Main struct{ DJ struct{ DJName string } }
+		Main struct {
+			DJ struct{ DJName string }
+			NP string
+		}
 	}
 	err = json.NewDecoder(r.Body).Decode(&v)
 	if err != nil {
 		return status{}, err
 	}
-	return status{v.Main.DJ.DJName}, nil
+	return status{v.Main.DJ.DJName, v.Main.NP}, nil
 }
 
-func getStream() (stream io.ReadCloser, metaint int, err error) {
-	req, err := http.NewRequest(http.MethodGet, "https://stream.r-a-d.io/main.mp3", nil)
+func getStream() (io.ReadCloser, error) {
+	resp, err := http.Get("https://stream.r-a-d.io/main.mp3")
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	req.Header.Add("Icy-MetaData", "1")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	metaint, err = strconv.Atoi(resp.Header.Get("icy-metaint"))
-	if err != nil {
-		resp.Body.Close()
-		return nil, 0, err
-	}
-	return resp.Body, metaint, nil
+	return resp.Body, nil
 }
 
 type stateFunc func(status) (stateFunc, error)
@@ -59,7 +50,7 @@ func isLive(dj string) bool {
 
 func wait(s status) (stateFunc, error) {
 	if isLive(s.dj) {
-		return record(s.dj)
+		return record(s)
 	}
 	return wait, nil
 }
@@ -80,15 +71,15 @@ func (cr *cancelReader) Read(p []byte) (int, error) {
 
 var hook func(args ...string)
 
-func record(dj string) (stateFunc, error) {
-	go hook("record", dj)
+func record(s status) (stateFunc, error) {
+	go hook("record", s.dj)
 
-	stream, metaint, err := getStream()
+	stream, err := getStream()
 	if err != nil {
 		return wait, err
 	}
 
-	basename := time.Now().Format(time.RFC3339) + "-" + dj
+	basename := time.Now().Format(time.RFC3339) + "-" + s.dj
 	audio, err := os.Create(basename + ".mp3")
 	if err != nil {
 		stream.Close()
@@ -102,24 +93,40 @@ func record(dj string) (stateFunc, error) {
 	}
 
 	cancel := make(chan struct{})
-	dec := icy.NewDecoder(&cancelReader{stream, cancel}, metaint)
-	dec.Audio(audio)
-	dec.Metadata(cue)
-	dec.Format(icy.CueFormatter(basename+".mp3", true))
-	go dec.Decode()
+	go io.Copy(audio, &cancelReader{stream, cancel})
 
+	fmt.Fprintf(cue, "FILE %q MP3\n", basename+".mp3")
+	start := time.Now()
+	var track int = 1
+	writeCueTrack := func(song string) {
+		index := time.Since(start)
+		fmt.Fprintf(cue, "  TRACK %02d AUDIO\n    TITLE %q\n    INDEX 01 %02.f:%02.f:%02.f",
+			track,
+			song,
+			index.Minutes(),
+			(index % time.Minute).Seconds(),
+			(index%time.Second).Seconds()*75)
+		track++
+	}
+	writeCueTrack(s.song)
+
+	_s := s
 	var fn stateFunc
 	fn = func(s status) (stateFunc, error) {
-		if s.dj != dj {
+		if s.dj != _s.dj {
 			close(cancel)
 			cue.Close()
 			audio.Close()
 			stream.Close()
 			if isLive(s.dj) {
-				return record(s.dj)
+				return record(s)
 			}
 			go hook("done")
 			return wait, nil
+		}
+		if s.song != _s.song {
+			writeCueTrack(s.song)
+			_s.song = s.song
 		}
 		return fn, nil
 	}
