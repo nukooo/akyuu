@@ -100,12 +100,12 @@ func record(s status) (stateFunc, error) {
 	var track int = 1
 	writeCueTrack := func(song string) {
 		index := time.Since(start)
-		fmt.Fprintf(cue, "  TRACK %02d AUDIO\n    TITLE %q\n    INDEX 01 %02.f:%02.f:%02.f\n",
+		fmt.Fprintf(cue, "  TRACK %02d AUDIO\n    TITLE %q\n    INDEX 01 %02d:%02d:%02d\n",
 			track,
 			song,
-			index.Minutes(),
-			(index % time.Minute).Seconds(),
-			(index%time.Second).Seconds()*75)
+			index/time.Minute,
+			index%time.Minute/time.Second,
+			index%time.Second*75/time.Second)
 		track++
 	}
 	writeCueTrack(s.song)
