@@ -89,14 +89,14 @@ func record(s status) stateFunc {
 	audio, err := os.Create(filename)
 	if err != nil {
 		stream.Close()
-		log.Fatalf("error creating %q: %v", filename, err)
+		log.Fatalf("error creating %q: %v\n", filename, err)
 	}
 	filename = basename + ".cue"
 	cue, err := os.Create(filename)
 	if err != nil {
 		audio.Close()
 		stream.Close()
-		log.Fatalf("error creating %q: %v", filename, err)
+		log.Fatalf("error creating %q: %v\n", filename, err)
 	}
 
 	cancel := make(chan struct{})
@@ -155,7 +155,7 @@ func main() {
 		filename := time.Now().Format(time.RFC3339) + ".log"
 		logfile, err := os.Create(filepath.Join(logpath, filename))
 		if err != nil {
-			log.Fatalf("error creating %q: %v", filename, err)
+			log.Fatalf("error creating %q: %v\n", filename, err)
 		}
 		defer logfile.Close()
 		log.SetOutput(io.MultiWriter(log.Writer(), logfile))
