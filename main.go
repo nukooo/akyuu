@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/nukooo/log"
@@ -73,24 +72,29 @@ func (cr *cancelReader) Read(p []byte) (int, error) {
 var hook func(args ...string)
 
 func record(s status) (stateFunc, error) {
-	go hook("record", s.dj)
+	log.Println(s.dj, "is streaming")
+	if hook != nil {
+		go hook("record", s.dj)
+	}
 
 	stream, err := getStream()
 	if err != nil {
-		return wait, err
+		return wait, fmt.Errorf("failed to get stream: %w", err)
 	}
 
 	basename := time.Now().Format(time.RFC3339) + "-" + s.dj
-	audio, err := os.Create(basename + ".mp3")
+	filename := basename + ".mp3"
+	audio, err := os.Create(filename)
 	if err != nil {
 		stream.Close()
-		return nil, err
+		return nil, fmt.Errorf("error creating %q: %w", filename, err)
 	}
-	cue, err := os.Create(basename + ".cue")
+	filename = basename + ".cue"
+	cue, err := os.Create(filename)
 	if err != nil {
 		audio.Close()
 		stream.Close()
-		return nil, err
+		return nil, fmt.Errorf("error creating %q: %w", filename, err)
 	}
 
 	cancel := make(chan struct{})
@@ -115,6 +119,7 @@ func record(s status) (stateFunc, error) {
 	var fn stateFunc
 	fn = func(s status) (stateFunc, error) {
 		if s.dj != _s.dj {
+			log.Println(_s.dj, "finished streaming")
 			close(cancel)
 			cue.Close()
 			audio.Close()
@@ -122,7 +127,9 @@ func record(s status) (stateFunc, error) {
 			if isLive(s.dj) {
 				return record(s)
 			}
-			go hook("done")
+			if hook != nil {
+				go hook("done")
+			}
 			return wait, nil
 		}
 		if s.song != _s.song {
@@ -140,16 +147,16 @@ func main() {
 	flag.StringVar(&hookpath, "hook", "", "path to hook script")
 	flag.Parse()
 
+	log.Println("starting akyuu")
+
 	if hookpath != "" {
 		hook = func(args ...string) {
-			log.Println(strings.Join(args, " "))
 			err := exec.Command(hookpath, args...).Run()
 			if err != nil {
-				log.Println(err)
+				log.Println("failed to run hook script:", err)
 			}
 		}
-	} else {
-		hook = func(args ...string) { log.Println(strings.Join(args, " ")) }
+		log.Printf("using hook script %q\n", hookpath)
 	}
 
 	ch := make(chan status)
@@ -158,7 +165,7 @@ func main() {
 		for {
 			s, err := getStatus()
 			if err != nil {
-				log.Println(err)
+				log.Println("failed to get status:", err)
 			}
 			ch <- s
 			<-tick
