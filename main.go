@@ -145,9 +145,10 @@ func record(s status) stateFunc {
 }
 
 func main() {
-	var hookpath, logpath string
+	var hookpath, logpath, outpath string
 	flag.StringVar(&hookpath, "hook", "", "path to hook script")
 	flag.StringVar(&logpath, "log", "", "path to log directory")
+	flag.StringVar(&outpath, "out", ".", "path to output directory")
 	flag.Parse()
 
 	if logpath != "" {
@@ -168,6 +169,11 @@ func main() {
 			}
 		}
 		log.Printf("using hook script %q\n", hookpath)
+	}
+
+	err := os.Chdir(outpath)
+	if err != nil {
+		log.Fatalf("failed to change to output directory %q: %v\n", err)
 	}
 
 	log.Println("starting akyuu")
