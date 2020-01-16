@@ -160,8 +160,6 @@ func main() {
 		log.SetOutput(io.MultiWriter(log.Writer(), logfile))
 	}
 
-	log.Println("starting akyuu")
-
 	if hookpath != "" {
 		hook = func(args ...string) {
 			err := exec.Command(hookpath, args...).Run()
@@ -171,6 +169,8 @@ func main() {
 		}
 		log.Printf("using hook script %q\n", hookpath)
 	}
+
+	log.Println("starting akyuu")
 
 	ch := make(chan status)
 	go func() {
