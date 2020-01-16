@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/nukooo/log"
@@ -144,9 +145,20 @@ func record(s status) stateFunc {
 }
 
 func main() {
-	var hookpath string
+	var hookpath, logpath string
 	flag.StringVar(&hookpath, "hook", "", "path to hook script")
+	flag.StringVar(&logpath, "log", "", "path to log directory")
 	flag.Parse()
+
+	if logpath != "" {
+		filename := time.Now().Format(time.RFC3339) + ".log"
+		logfile, err := os.Create(filepath.Join(logpath, filename))
+		if err != nil {
+			log.Fatalf("error creating %q: %v", filename, err)
+		}
+		defer logfile.Close()
+		log.SetOutput(io.MultiWriter(log.Writer(), logfile))
+	}
 
 	log.Println("starting akyuu")
 
