@@ -5,12 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/nukooo/log"
 )
 
 type status struct{ dj, song string }
