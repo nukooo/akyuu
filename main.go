@@ -159,6 +159,7 @@ func main() {
 		}
 		defer logfile.Close()
 		log.SetOutput(io.MultiWriter(log.Writer(), logfile))
+		log.Printf("using log directory %q\n", logpath)
 	}
 
 	if hookpath != "" {
@@ -175,6 +176,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to change to output directory %q: %v\n", err)
 	}
+	log.Printf("using output directory %q\n", outpath)
 
 	log.Println("starting akyuu")
 
