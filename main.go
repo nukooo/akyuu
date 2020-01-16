@@ -42,17 +42,17 @@ func getStream() (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-type stateFunc func(status) (stateFunc, error)
+type stateFunc func(status) stateFunc
 
 func isLive(dj string) bool {
 	return dj != "" && dj != "Hanyuu-sama"
 }
 
-func wait(s status) (stateFunc, error) {
+func wait(s status) stateFunc {
 	if isLive(s.dj) {
 		return record(s)
 	}
-	return wait, nil
+	return wait
 }
 
 type cancelReader struct {
@@ -71,7 +71,7 @@ func (cr *cancelReader) Read(p []byte) (int, error) {
 
 var hook func(args ...string)
 
-func record(s status) (stateFunc, error) {
+func record(s status) stateFunc {
 	log.Println(s.dj, "is streaming")
 	if hook != nil {
 		go hook("record", s.dj)
@@ -79,7 +79,8 @@ func record(s status) (stateFunc, error) {
 
 	stream, err := getStream()
 	if err != nil {
-		return wait, fmt.Errorf("failed to get stream: %w", err)
+		log.Println("failed to get stream:", err)
+		return wait
 	}
 
 	basename := time.Now().Format(time.RFC3339) + "-" + s.dj
@@ -87,14 +88,14 @@ func record(s status) (stateFunc, error) {
 	audio, err := os.Create(filename)
 	if err != nil {
 		stream.Close()
-		return nil, fmt.Errorf("error creating %q: %w", filename, err)
+		log.Fatalf("error creating %q: %v", filename, err)
 	}
 	filename = basename + ".cue"
 	cue, err := os.Create(filename)
 	if err != nil {
 		audio.Close()
 		stream.Close()
-		return nil, fmt.Errorf("error creating %q: %w", filename, err)
+		log.Fatalf("error creating %q: %v", filename, err)
 	}
 
 	cancel := make(chan struct{})
@@ -117,7 +118,7 @@ func record(s status) (stateFunc, error) {
 
 	_s := s
 	var fn stateFunc
-	fn = func(s status) (stateFunc, error) {
+	fn = func(s status) stateFunc {
 		if s.dj != _s.dj {
 			log.Println(_s.dj, "finished streaming")
 			close(cancel)
@@ -130,16 +131,16 @@ func record(s status) (stateFunc, error) {
 			if hook != nil {
 				go hook("done")
 			}
-			return wait, nil
+			return wait
 		}
 		if s.song != _s.song {
 			writeCueTrack(s.song)
 			_s.song = s.song
 		}
-		return fn, nil
+		return fn
 	}
 
-	return fn, nil
+	return fn
 }
 
 func main() {
@@ -172,11 +173,6 @@ func main() {
 		}
 	}()
 
-	var err error
-	for fn := wait; fn != nil; {
-		fn, err = fn(<-ch)
-		if err != nil {
-			log.Println(err)
-		}
+	for fn := wait; fn != nil; fn = fn(<-ch) {
 	}
 }
