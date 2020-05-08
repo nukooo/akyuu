@@ -46,7 +46,7 @@ func getStream() (io.ReadCloser, error) {
 type stateFunc func(status) stateFunc
 
 func isLive(dj string) bool {
-	return dj != "" && dj != "Hanyuu-sama"
+	return dj != "Hanyuu-sama"
 }
 
 func wait(s status) stateFunc {
@@ -187,8 +187,9 @@ func main() {
 			s, err := getStatus()
 			if err != nil {
 				log.Println("failed to get status:", err)
+			} else {
+				ch <- s
 			}
-			ch <- s
 			<-tick
 		}
 	}()
