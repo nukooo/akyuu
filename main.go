@@ -78,29 +78,42 @@ func record(s status) stateFunc {
 		go hook("record", s.dj)
 	}
 
-	stream, err := getStream()
-	if err != nil {
-		log.Println("failed to get stream:", err)
-		return wait
-	}
-
 	basename := time.Now().Format(time.RFC3339) + "-" + s.dj
 	filename := basename + ".mp3"
 	audio, err := os.Create(filename)
 	if err != nil {
-		stream.Close()
 		log.Fatalf("error creating %q: %v\n", filename, err)
 	}
 	filename = basename + ".cue"
 	cue, err := os.Create(filename)
 	if err != nil {
 		audio.Close()
-		stream.Close()
 		log.Fatalf("error creating %q: %v\n", filename, err)
 	}
 
 	cancel := make(chan struct{})
-	go io.Copy(audio, &cancelReader{stream, cancel})
+	go func() {
+		for {
+			stream, err := getStream()
+			if err != nil {
+				log.Println("failed to get stream:", err)
+			} else {
+				_, err = io.Copy(audio, &cancelReader{stream, cancel})
+				if err != nil {
+					log.Println("error copying stream:", err)
+				}
+				stream.Close()
+			}
+
+			// retry
+			select {
+			case <-cancel:
+				audio.Close()
+				return
+			default:
+			}
+		}
+	}()
 
 	fmt.Fprintf(cue, "FILE %q MP3\n", basename+".mp3")
 	start := time.Now()
@@ -124,8 +137,6 @@ func record(s status) stateFunc {
 			log.Println(_s.dj, "finished streaming")
 			close(cancel)
 			cue.Close()
-			audio.Close()
-			stream.Close()
 			if isLive(s.dj) {
 				return record(s)
 			}
