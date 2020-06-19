@@ -14,7 +14,10 @@ import (
 	"github.com/nukooo/log"
 )
 
-type status struct{ dj, song string }
+type status struct {
+	live     bool
+	dj, song string
+}
 
 func getStatus() (status, error) {
 	r, err := http.Get("https://r-a-d.io/api")
@@ -24,15 +27,16 @@ func getStatus() (status, error) {
 	defer r.Body.Close()
 	var v struct {
 		Main struct {
-			DJ struct{ DJName string }
-			NP string
+			IsAFKStream bool
+			DJ          struct{ DJName string }
+			NP          string
 		}
 	}
 	err = json.NewDecoder(r.Body).Decode(&v)
 	if err != nil {
 		return status{}, err
 	}
-	return status{v.Main.DJ.DJName, v.Main.NP}, nil
+	return status{!v.Main.IsAFKStream, v.Main.DJ.DJName, v.Main.NP}, nil
 }
 
 func getStream() (io.ReadCloser, error) {
@@ -45,12 +49,8 @@ func getStream() (io.ReadCloser, error) {
 
 type stateFunc func(status) stateFunc
 
-func isLive(dj string) bool {
-	return dj != "Hanyuu-sama"
-}
-
 func wait(s status) stateFunc {
-	if isLive(s.dj) {
+	if s.live {
 		return record(s)
 	}
 	return wait
@@ -137,7 +137,7 @@ func record(s status) stateFunc {
 			log.Println(_s.dj, "finished streaming")
 			close(cancel)
 			cue.Close()
-			if isLive(s.dj) {
+			if s.live {
 				return record(s)
 			}
 			if hook != nil {
