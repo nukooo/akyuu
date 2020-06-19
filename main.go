@@ -155,6 +155,17 @@ func record(s status) stateFunc {
 	return fn
 }
 
+type multiWriter struct {
+	writers []io.Writer
+}
+
+func (mw *multiWriter) Write(p []byte) (n int, err error) {
+	for _, w := range mw.writers {
+		w.Write(p)
+	}
+	return len(p), nil
+}
+
 func main() {
 	var hookpath, logpath, outpath string
 	flag.StringVar(&hookpath, "hook", "", "path to hook script")
@@ -169,7 +180,7 @@ func main() {
 			log.Fatalf("error creating %q: %v\n", filename, err)
 		}
 		defer logfile.Close()
-		log.SetOutput(io.MultiWriter(log.Writer(), logfile))
+		log.SetOutput(&multiWriter{[]io.Writer{log.Writer(), logfile}})
 		log.Printf("using log directory %q\n", logpath)
 	}
 
